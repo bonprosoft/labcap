@@ -31,8 +31,8 @@ def main(interface_name):
         sys.stderr.write("Device name %s not found.\n" % interface_name)
         sys.exit(-1)
 
-    p = pcapy.open_live(interface_name, 65536, False, 100)
-    p.setfilter("arp")
+    p = pcapy.open_live(interface_name, 65536, True, 100)
+    # p.setfilter("arp")
     p.loop(-1, handler)
 
 if __name__ == "__main__":
