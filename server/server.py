@@ -11,6 +11,9 @@ import re
 import slack_notify
 import threading
 
+startTime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+logging.basicConfig(filename='logs/activity_' + startTime + '.log', filemode='w', format='%(asctime)s %(message)s', level=logging.INFO)
+
 con = MongoClient("localhost")
 db = con["labcap"]
 
@@ -28,7 +31,8 @@ class DeactiveWatcher(threading.Thread):
         while True:
             for user in db.user.find({"is_active": True}):
                 if (not is_active(user["last_active"])):
-                    slack_notify.notify_deactive(user["username"], datetime.datetime.now() - datetime.datetime.strptime(user["since_active"], DATETIME_FORMAT))
+                    slack_notify.notify_deactive(user["username"], datetime.datetime.strptime(user["last_active"], DATETIME_FORMAT) - datetime.datetime.strptime(user["since_active"], DATETIME_FORMAT))
+                    logging.info("Event: Deactive, UserName: %s, Time: %s" % (user["username"], user["last_active"]))
                     user["is_active"] = False
                     db.user.save(user)
             time.sleep(self.t)
@@ -96,7 +100,7 @@ def detail_user(name):
     if (not user):
         abort(404)
     else:
-        temp = {"username": name, "address": user["address"], "last_active": user["last_active"], "is_active": is_active(user["last_active"])}
+        temp = {"username": name, "address": user["address"], "last_active": user["last_active"], "since_active": user["since_active"], "is_active": is_active(user["last_active"])}
         return json.dumps(temp)
 
 @app.route("/api/is_active/<name>.json")
@@ -119,6 +123,7 @@ def record_active(mac_addr):
             user["since_active"] = datetime.datetime.now().strftime(DATETIME_FORMAT)
             # 通知
             slack_notify.notify_active(user["username"], datetime.datetime.now() - last_active)
+            logging.info("Event: Active, UserName: %s, Time: %s" % (user["username"], user["since_active"]))
 
         user["last_active"] = datetime.datetime.now().strftime(DATETIME_FORMAT)
         user["is_active"] = True

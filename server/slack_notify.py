@@ -9,7 +9,7 @@ USERNAME = "yurei"
 CHANNEL = "#room"
 
 def create_timespan_string(timespan):
-    return "%d日%d時間" % (timespan.days, timespan.seconds / (60 * 60))
+    return "%d日%d時間%d分" % (timespan.days, timespan.seconds / (60 * 60), timespan.seconds % (60 * 60) / 60)
 
 def notify_active(username, timespan):
     item = {"text": "%sさんが入室しました。(前回の退室から %s ぶり)" % (str(username), create_timespan_string(timespan)), "username": USERNAME, "icon_emoji": ":ghost:", "channel": CHANNEL }
