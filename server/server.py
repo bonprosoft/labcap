@@ -4,8 +4,12 @@ from pymongo import MongoClient
 import datetime
 from flask import Flask, request, render_template, redirect, url_for, abort
 import json
+import logging
+import time
 from subprocess import Popen, PIPE
 import re
+import slack_notify
+import threading
 
 con = MongoClient("localhost")
 db = con["labcap"]
@@ -14,6 +18,20 @@ DATETIME_FORMAT = "%Y%m%d%H%M%S"
 ACTIVE_THRESHOLD_SEC = 60 * 15
 
 app = Flask(__name__)
+
+class DeactiveWatcher(threading.Thread):
+    def __init__(self, t):
+        super(DeactiveWatcher, self).__init__()
+        self.t = t
+
+    def run(self):
+        while True:
+            for user in db.user.find({"is_active": True}):
+                if (not is_active(user["last_active"])):
+                    slack_notify.notify_deactive(user["username"], datetime.datetime.now() - datetime.datetime.strptime(user["since_active"], DATETIME_FORMAT))
+                    user["is_active"] = False
+                    db.user.save(user)
+            time.sleep(self.t)
 
 def arp_ip(ip):
     Popen(["ping", "-c 1", ip], stdout = PIPE)
@@ -56,7 +74,7 @@ def register_name():
 
     user = db.user.find_one({"username": username})
     if (not user):
-        user = {"username": username, "last_active": datetime.datetime.now().strftime(DATETIME_FORMAT), "address": [ mac_addr ]}
+        user = {"username": username, "since_active": datetime.datetime.now().strftime(DATETIME_FORMAT), "is_active": False, "last_active": datetime.datetime.now().strftime(DATETIME_FORMAT), "address": [ mac_addr ]}
         db.user.insert(user)
     else:
         if (not mac_addr in user["address"]):
@@ -93,14 +111,25 @@ def is_active_user(name):
 @app.route("/api/record/<mac_addr>")
 def record_active(mac_addr):
     user = db.user.find_one({"address": {"$in":[mac_addr] }})
-    print mac_addr
     if (not user):
         return "OK"
     else:
+        last_active = datetime.datetime.strptime(user["last_active"], DATETIME_FORMAT)
+        if (not user["is_active"]):
+            user["since_active"] = datetime.datetime.now().strftime(DATETIME_FORMAT)
+            # 通知
+            slack_notify.notify_active(user["username"], datetime.datetime.now() - last_active)
+
         user["last_active"] = datetime.datetime.now().strftime(DATETIME_FORMAT)
+        user["is_active"] = True
         db.user.save(user)
         return "OK"
 
 if __name__ == "__main__":
+    watcher = DeactiveWatcher(1 * 60)
+    watcher.start()
+    log = logging.getLogger('werkzeug')
+    # app.logger.setLevel(logging.WARNING)
+    log.setLevel(logging.ERROR)
     app.run(host="0.0.0.0", port=5050)
 

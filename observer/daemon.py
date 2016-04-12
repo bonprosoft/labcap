@@ -18,7 +18,6 @@ def handler(header, data):
     eth = EthDecoder().decode(data)
     host = eth.get_ether_shost()
     mac_addr = ":".join(["%02x" % x for x in host.tolist()]).lower()
-    print mac_addr
     report(mac_addr)
 
 def main(interface_name):
